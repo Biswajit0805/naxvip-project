@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Upload, RotateCcw, ArrowLeft, Check, Lock, Trash2, Plus } from "lucide-react";
+import { Upload, RotateCcw, ArrowLeft, Check, Lock, Trash2, Plus, User, HelpCircle, X } from "lucide-react";
 import { IMAGE_LABELS } from "./images";
 import { FIELD_LABELS } from "./content";
 
@@ -7,8 +7,30 @@ import { FIELD_LABELS } from "./content";
 // are now managed together with their name/price/label in their own tabs.
 const SITE_IMAGE_KEYS = ["logo", "hero", "summer", "crafted", "club"];
 
-const ADMIN_PASSCODE = "naxvip123"; // client-side only — change this, or swap for real auth later
+// Default admin credentials — used the very first time, or after "Reset credentials".
+// Change these defaults any time by editing the values below.
+const DEFAULT_CREDENTIALS = {
+  username: "admin",
+  password: "naxvip123",
+  securityQuestion: "What city is your store based in?",
+  securityAnswer: "samsi",
+};
+const CREDENTIALS_KEY = "naxvip_admin_credentials";
 const AUTH_KEY = "naxvip_admin_authed";
+
+function loadCredentials() {
+  try {
+    const raw = localStorage.getItem(CREDENTIALS_KEY);
+    if (raw) return { ...DEFAULT_CREDENTIALS, ...JSON.parse(raw) };
+  } catch (e) {}
+  return DEFAULT_CREDENTIALS;
+}
+
+function saveCredentials(creds) {
+  try {
+    localStorage.setItem(CREDENTIALS_KEY, JSON.stringify(creds));
+  } catch (e) {}
+}
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -143,7 +165,7 @@ function MiniImageUpload({ src, onChange }) {
   );
 }
 
-function TextField({ label, value, onChange, multiline }) {
+function TextField({ label, value, onChange, multiline, type = "text" }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-[11px] text-[#8a8175]">{label}</span>
@@ -156,7 +178,7 @@ function TextField({ label, value, onChange, multiline }) {
         />
       ) : (
         <input
-          type="text"
+          type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
@@ -182,20 +204,150 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
-function PasscodeGate({ onUnlock }) {
-  const [value, setValue] = useState("");
+function ForgotPasswordModal({ credentials, onClose, onReset }) {
+  const [step, setStep] = useState("question"); // "question" -> "reset" -> "done"
+  const [answer, setAnswer] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+
+  const checkAnswer = (e) => {
+    e.preventDefault();
+    if (answer.trim().toLowerCase() === credentials.securityAnswer.trim().toLowerCase()) {
+      setError("");
+      setStep("reset");
+    } else {
+      setError("That answer doesn't match. Try again.");
+    }
+  };
+
+  const submitNewPassword = (e) => {
+    e.preventDefault();
+    if (newPassword.length < 4) {
+      setError("Password should be at least 4 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords don't match.");
+      return;
+    }
+    onReset(newPassword);
+    setStep("done");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center px-4 z-50">
+      <div className="w-full max-w-sm bg-[#141210] border border-[#2a2620] rounded-xl p-6 relative">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-3 right-3 text-[#8a8175] hover:text-[#e8ded0]"
+        >
+          <X size={16} />
+        </button>
+
+        {step === "question" && (
+          <form onSubmit={checkAnswer} className="flex flex-col gap-4">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <div className="w-12 h-12 rounded-full border border-[#c9a876] flex items-center justify-center">
+                <HelpCircle size={18} className="text-[#c9a876]" />
+              </div>
+              <h2 className="font-display text-lg">Security Question</h2>
+              <p className="text-[11px] text-[#8a8175]">{credentials.securityQuestion}</p>
+            </div>
+            <input
+              type="text"
+              autoFocus
+              value={answer}
+              onChange={(e) => { setAnswer(e.target.value); setError(""); }}
+              placeholder="Your answer"
+              className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
+            />
+            {error && <p className="text-[11px] text-red-400 -mt-2">{error}</p>}
+            <button type="submit" className="w-full bg-[#c9a876] hover:bg-[#d9bc8e] text-[#0b0a08] text-sm font-medium rounded-md py-2.5 transition-colors">
+              Verify Answer
+            </button>
+          </form>
+        )}
+
+        {step === "reset" && (
+          <form onSubmit={submitNewPassword} className="flex flex-col gap-4">
+            <div className="flex flex-col items-center gap-2 text-center">
+              <div className="w-12 h-12 rounded-full border border-[#c9a876] flex items-center justify-center">
+                <Lock size={18} className="text-[#c9a876]" />
+              </div>
+              <h2 className="font-display text-lg">Set New Password</h2>
+              <p className="text-[11px] text-[#8a8175]">Choose a new password for your admin login.</p>
+            </div>
+            <input
+              type="password"
+              autoFocus
+              value={newPassword}
+              onChange={(e) => { setNewPassword(e.target.value); setError(""); }}
+              placeholder="New password"
+              className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
+            />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => { setConfirmPassword(e.target.value); setError(""); }}
+              placeholder="Confirm new password"
+              className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
+            />
+            {error && <p className="text-[11px] text-red-400 -mt-2">{error}</p>}
+            <button type="submit" className="w-full bg-[#c9a876] hover:bg-[#d9bc8e] text-[#0b0a08] text-sm font-medium rounded-md py-2.5 transition-colors">
+              Save New Password
+            </button>
+          </form>
+        )}
+
+        {step === "done" && (
+          <div className="flex flex-col items-center gap-3 text-center py-2">
+            <div className="w-12 h-12 rounded-full border border-[#c9a876] flex items-center justify-center">
+              <Check size={18} className="text-[#c9a876]" />
+            </div>
+            <h2 className="font-display text-lg">Password Updated</h2>
+            <p className="text-[11px] text-[#8a8175]">You can now log in with your new password.</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full bg-[#c9a876] hover:bg-[#d9bc8e] text-[#0b0a08] text-sm font-medium rounded-md py-2.5 transition-colors mt-2"
+            >
+              Back to Login
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LoginGate({ onUnlock }) {
+  const [credentials, setCredentials] = useState(loadCredentials);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
 
   const submit = (e) => {
     e.preventDefault();
-    if (value === ADMIN_PASSCODE) {
+    if (
+      username.trim().toLowerCase() === credentials.username.trim().toLowerCase() &&
+      password === credentials.password
+    ) {
       try {
         sessionStorage.setItem(AUTH_KEY, "1");
       } catch (e) {}
       onUnlock();
     } else {
-      setError("Wrong passcode, try again.");
+      setError("Incorrect username or password.");
     }
+  };
+
+  const handlePasswordReset = (newPassword) => {
+    const next = { ...credentials, password: newPassword };
+    setCredentials(next);
+    saveCredentials(next);
   };
 
   return (
@@ -205,25 +357,64 @@ function PasscodeGate({ onUnlock }) {
           <Lock size={18} className="text-[#c9a876]" />
         </div>
         <div className="text-center">
-          <h1 className="font-display text-lg">Admin Access</h1>
-          <p className="text-[11px] text-[#8a8175] mt-1">Enter the passcode to manage NAX VIP images.</p>
+          <h1 className="font-display text-lg">Admin Login</h1>
+          <p className="text-[11px] text-[#8a8175] mt-1">Sign in to manage your NAX VIP site.</p>
         </div>
-        <input
-          type="password"
-          autoFocus
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setError(""); }}
-          placeholder="Passcode"
-          className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
-        />
-        {error && <p className="text-[11px] text-red-400 -mt-2">{error}</p>}
+
+        <div className="w-full flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-[#8a8175] flex items-center gap-1.5">
+              <User size={12} /> Username
+            </span>
+            <input
+              type="text"
+              autoFocus
+              value={username}
+              onChange={(e) => { setUsername(e.target.value); setError(""); }}
+              placeholder="Username"
+              className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-[#8a8175] flex items-center gap-1.5">
+              <Lock size={12} /> Password
+            </span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              placeholder="Password"
+              className="w-full bg-[#0b0a08] border border-[#2a2620] rounded-md px-3 py-2 text-sm text-[#f3ece0] focus:outline-none focus:border-[#c9a876]"
+            />
+          </label>
+        </div>
+
+        {error && <p className="text-[11px] text-red-400 -mt-1">{error}</p>}
+
         <button type="submit" className="w-full bg-[#c9a876] hover:bg-[#d9bc8e] text-[#0b0a08] text-sm font-medium rounded-md py-2.5 transition-colors">
-          Unlock
+          Log In
         </button>
+
+        <button
+          type="button"
+          onClick={() => setShowForgot(true)}
+          className="text-[11px] text-[#8a8175] hover:text-[#c9a876] transition-colors -mt-1"
+        >
+          Forgot password?
+        </button>
+
         <a href="#" className="text-[11px] text-[#6b6255] hover:text-[#c9a876] flex items-center gap-1 mt-1">
           <ArrowLeft size={12} /> Back to site
         </a>
       </form>
+
+      {showForgot && (
+        <ForgotPasswordModal
+          credentials={credentials}
+          onClose={() => setShowForgot(false)}
+          onReset={handlePasswordReset}
+        />
+      )}
     </div>
   );
 }
@@ -254,9 +445,22 @@ export default function AdminPanel({
     }
   });
   const [tab, setTab] = useState("images");
+  const [credentials, setCredentials] = useState(loadCredentials);
+
+  const handleLogout = () => {
+    try {
+      sessionStorage.removeItem(AUTH_KEY);
+    } catch (e) {}
+    setAuthed(false);
+  };
+
+  const handleCredentialsUpdate = (next) => {
+    setCredentials(next);
+    saveCredentials(next);
+  };
 
   if (!authed) {
-    return <PasscodeGate onUnlock={() => setAuthed(true)} />;
+    return <LoginGate onUnlock={() => setAuthed(true)} />;
   }
 
   return (
@@ -301,6 +505,15 @@ export default function AdminPanel({
             >
               <ArrowLeft size={13} /> Back to Site
             </a>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Log out of the admin panel?")) handleLogout();
+              }}
+              className="flex items-center gap-1.5 text-[11px] text-[#8a8175] hover:text-[#e8ded0] border border-[#2a2620] rounded-md px-3 py-2 transition-colors"
+            >
+              <Lock size={13} /> Log Out
+            </button>
           </div>
         </div>
 
@@ -309,6 +522,7 @@ export default function AdminPanel({
           <TabButton active={tab === "products"} onClick={() => setTab("products")}>PRODUCTS</TabButton>
           <TabButton active={tab === "categories"} onClick={() => setTab("categories")}>CATEGORIES</TabButton>
           <TabButton active={tab === "text"} onClick={() => setTab("text")}>TEXT & BANNERS</TabButton>
+          <TabButton active={tab === "account"} onClick={() => setTab("account")}>ACCOUNT</TabButton>
         </div>
       </header>
 
@@ -338,6 +552,9 @@ export default function AdminPanel({
             addAnnouncement={addAnnouncement}
             deleteAnnouncement={deleteAnnouncement}
           />
+        )}
+        {tab === "account" && (
+          <AccountTab credentials={credentials} onUpdate={handleCredentialsUpdate} />
         )}
       </main>
     </div>
@@ -453,6 +670,104 @@ function CategoriesTab({ categories, updateCategory, addCategory, deleteCategory
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function AccountTab({ credentials, onUpdate }) {
+  const [username, setUsername] = useState(credentials.username);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [securityQuestion, setSecurityQuestion] = useState(credentials.securityQuestion);
+  const [securityAnswer, setSecurityAnswer] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (currentPassword !== credentials.password) {
+      setError("Current password is incorrect.");
+      return;
+    }
+
+    const next = { ...credentials };
+    if (username.trim()) next.username = username.trim();
+    if (newPassword) {
+      if (newPassword.length < 4) {
+        setError("New password should be at least 4 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError("New passwords don't match.");
+        return;
+      }
+      next.password = newPassword;
+    }
+    if (securityQuestion.trim()) next.securityQuestion = securityQuestion.trim();
+    if (securityAnswer.trim()) next.securityAnswer = securityAnswer.trim();
+
+    onUpdate(next);
+    setNewPassword("");
+    setConfirmPassword("");
+    setCurrentPassword("");
+    setSecurityAnswer("");
+    setSuccess("Account details updated successfully.");
+  };
+
+  return (
+    <section>
+      <h2 className="text-[11px] tracking-[0.2em] text-[#c9a876] mb-4">ACCOUNT SETTINGS</h2>
+      <form onSubmit={submit} className="max-w-md bg-[#141210] border border-[#2a2620] rounded-xl p-5 flex flex-col gap-4">
+        <TextField label="Username" value={username} onChange={setUsername} />
+
+        <div className="h-px bg-[#2a2620]" />
+
+        <TextField
+          label="Current Password (required to save changes)"
+          value={currentPassword}
+          onChange={setCurrentPassword}
+          type="password"
+        />
+        <TextField
+          label="New Password (leave blank to keep current)"
+          value={newPassword}
+          onChange={setNewPassword}
+          type="password"
+        />
+        <TextField
+          label="Confirm New Password"
+          value={confirmPassword}
+          onChange={setConfirmPassword}
+          type="password"
+        />
+
+        <div className="h-px bg-[#2a2620]" />
+
+        <TextField
+          label="Security Question (used for Forgot Password)"
+          value={securityQuestion}
+          onChange={setSecurityQuestion}
+        />
+        <TextField
+          label="Security Answer (leave blank to keep current)"
+          value={securityAnswer}
+          onChange={setSecurityAnswer}
+        />
+
+        {error && <p className="text-[11px] text-red-400">{error}</p>}
+        {success && <p className="text-[11px] text-green-400">{success}</p>}
+
+        <button
+          type="submit"
+          className="w-full bg-[#c9a876] hover:bg-[#d9bc8e] text-[#0b0a08] text-sm font-medium rounded-md py-2.5 transition-colors"
+        >
+          Save Account Settings
+        </button>
+      </form>
     </section>
   );
 }
